@@ -1,0 +1,14 @@
+#explorer-container button {
+    background-color: #1e1e1e;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 5px;
+    margin: 5px;
+}
+
+#explorer-container button:hover {
+    background-color: #444;
+}
