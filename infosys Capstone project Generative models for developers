@@ -1,0 +1,123 @@
+# i dont kno what this is really doing but imports
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+
+# dataset load
+(x, y), (_, _) = tf.keras.datasets.cifar10.load_data()
+x = x.astype('float32') / 255.0
+y = y.flatten()
+
+# labels 2 one hot
+y = tf.keras.utils.to_categorical(y, 10)
+
+# just making vars
+class_names = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
+img_s = 32
+n_classes = 10
+z_dim = 100
+
+# i tried to make generator lol
+def gen():
+    z = tf.keras.Input(shape=(z_dim,))
+    l = tf.keras.Input(shape=(n_classes,))
+    i = tf.keras.layers.Concatenate()([z, l])
+    i = tf.keras.layers.Dense(8*8*256)(i)
+    i = tf.keras.layers.Reshape((8, 8, 256))(i)
+    i = tf.keras.layers.BatchNormalization()(i)
+    i = tf.keras.layers.ReLU()(i)
+    i = tf.keras.layers.Conv2DTranspose(128, 4, 2, padding='same')(i)
+    i = tf.keras.layers.BatchNormalization()(i)
+    i = tf.keras.layers.ReLU()(i)
+    i = tf.keras.layers.Conv2DTranspose(3, 4, 2, padding='same', activation='tanh')(i)
+    return tf.keras.Model([z, l], i)
+
+# discriminator... i followed youtube for this
+def disc():
+    img = tf.keras.Input(shape=(img_s, img_s, 3))
+    l = tf.keras.Input(shape=(n_classes,))
+    lab = tf.keras.layers.Dense(img_s * img_s * 1)(l)
+    lab = tf.keras.layers.Reshape((img_s, img_s, 1))(lab)
+    x = tf.keras.layers.Concatenate()([img, lab])
+    x = tf.keras.layers.Conv2D(64, 4, 2, padding='same')(x)
+    x = tf.keras.layers.LeakyReLU(0.2)(x)
+    x = tf.keras.layers.Conv2D(128, 4, 2, padding='same')(x)
+    x = tf.keras.layers.LeakyReLU(0.2)(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+    return tf.keras.Model([img, l], x)
+
+# making both
+g = gen()
+d = disc()
+d.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5), metrics=['accuracy'])
+
+# gan model
+d.trainable = False
+z_in = tf.keras.Input(shape=(z_dim,))
+l_in = tf.keras.Input(shape=(n_classes,))
+f_img = g([z_in, l_in])
+validity = d([f_img, l_in])
+gan = tf.keras.Model([z_in, l_in], validity)
+gan.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5))
+
+# train func copied from somewhere
+def train(epochs=5000, bs=64):
+    half = bs // 2
+    for e in range(epochs):
+        idx = np.random.randint(0, x.shape[0], half)
+        imgs = x[idx]
+        labs = y[idx]
+
+        noise = np.random.normal(0, 1, (half, z_dim))
+        fake = g.predict([noise, labs], verbose=0)
+
+        d_loss_real = d.train_on_batch([imgs, labs], np.ones((half, 1)))
+        d_loss_fake = d.train_on_batch([fake, labs], np.zeros((half, 1)))
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+        noise = np.random.normal(0, 1, (bs, z_dim))
+        sampled_labels = y[np.random.randint(0, y.shape[0], bs)]
+        g_loss = gan.train_on_batch([noise, sampled_labels], np.ones((bs, 1)))
+
+        if e % 500 == 0:
+            print(f"ep {e} - d_loss: {d_loss[0]:.4f} acc: {100*d_loss[1]:.2f}% - g_loss: {g_loss:.4f}")
+            show_samples()
+
+# make images from input class
+def show_samples():
+    n = 10
+    noise = np.random.normal(0, 1, (n, z_dim))
+    fig, axs = plt.subplots(1, n, figsize=(15, 2))
+    for i in range(n):
+        lidx = np.random.randint(0, 10)
+        label = tf.keras.utils.to_categorical([lidx], 10)
+        img = g.predict([noise[i:i+1], label], verbose=0)[0]
+        axs[i].imshow((img + 1) / 2)
+        axs[i].set_title(class_names[lidx], fontsize=8)
+        axs[i].axis('off')
+    plt.show()
+
+# user ask which class to see
+def user_gen():
+    inp = input("Enter class (airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck): ").strip().lower()
+    if inp not in class_names:
+        print("wrong class name")
+        return
+    idx = class_names.index(inp)
+    noise = np.random.normal(0, 1, (5, z_dim))
+    label = tf.keras.utils.to_categorical([idx] * 5, 10)
+    imgs = g.predict([noise, label], verbose=0)
+
+    for i in range(5):
+        plt.subplot(1, 5, i+1)
+        plt.imshow((imgs[i] + 1) / 2)
+        plt.axis('off')
+        plt.title(inp)
+    plt.show()
+
+# uncomment below to train it
+# train(epochs=3000, bs=128)
+
+# then user can call:
+# user_gen()
