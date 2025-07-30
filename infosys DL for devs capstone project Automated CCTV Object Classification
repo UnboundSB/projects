@@ -1,0 +1,111 @@
+# ---- Imports ----
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras.datasets import fashion_mnist
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.utils import to_categorical
+from sklearn.metrics import classification_report, confusion_matrix
+
+# ---- Load Dataset ----
+(x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+
+# Normalize pixel values to [0, 1]
+x_train = x_train / 255.0
+x_test = x_test / 255.0
+
+# Expand dimensions for channel (grayscale)
+x_train = np.expand_dims(x_train, -1)  # (60000, 28, 28, 1)
+x_test = np.expand_dims(x_test, -1)
+
+# One-hot encode labels
+y_train_cat = to_categorical(y_train, 10)
+y_test_cat = to_categorical(y_test, 10)
+
+# ---- Build CNN Model ----
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),
+    MaxPooling2D((2,2)),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D((2,2)),
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dropout(0.3),
+    Dense(10, activation='softmax')
+])
+
+# ---- Compile Model ----
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# ---- Train Model ----
+history = model.fit(x_train, y_train_cat, epochs=10, batch_size=64, validation_split=0.1)
+
+# ---- Evaluate Model ----
+test_loss, test_acc = model.evaluate(x_test, y_test_cat)
+print("Test accuracy:", test_acc)
+
+# ---- Classification Report ----
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+print(classification_report(y_test, y_pred_classes))
+
+# ---- Confusion Matrix ----
+cm = confusion_matrix(y_test, y_pred_classes)
+print("Confusion Matrix:\n", cm)
+
+# ---- Accuracy Plot ----
+plt.plot(history.history['accuracy'], label='Train Acc')
+plt.plot(history.history['val_accuracy'], label='Val Acc')
+plt.title("Model Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()
+
+# ---- Loss Plot ----
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Val Loss')
+plt.title("Model Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+# ---- Simulate Smart CCTV Recording ----
+# Map Fashion-MNIST classes to simulated object categories
+class_map = {
+    0: "human",        # T-shirt/top
+    1: "human",        # Trouser
+    2: "human",        # Pullover
+    3: "human",        # Dress
+    4: "human",        # Coat
+    5: "animal",       # Sandal
+    6: "vehicle",      # Shirt
+    7: "animal",       # Sneaker
+    8: "vehicle",      # Bag
+    9: "vehicle"       # Ankle boot
+}
+
+# Simulate 20 CCTV input frames
+def simulate_cctv_trigger(num_frames=20):
+    indexes = np.random.choice(len(x_test), num_frames)
+    for i in indexes:
+        img = x_test[i:i+1]
+        true_label = y_test[i]
+        pred = model.predict(img)
+        pred_class = np.argmax(pred)
+        category = class_map[pred_class]
+
+        if category in ['human', 'vehicle', 'animal']:
+            print(f"Detected: {category} -> [RECORDING STARTED]")
+        else:
+            print("No relevant object -> [IDLE]")
+
+        plt.imshow(img[0].squeeze(), cmap='gray')
+        plt.title(f"Predicted: {category}")
+        plt.axis('off')
+        plt.show()
+
+# ---- Trigger Simulation ----
+simulate_cctv_trigger()
